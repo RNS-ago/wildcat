@@ -38,14 +38,57 @@ Clock 5 ns (200 MHz)
 #### Forwarding in EX stage
 
 max_tt_025C_1v80: -1.25
+t_ex = 6.25 ns (160 MHz)
+
+FPGA (5 ns constr) slack: -1.965 ns (144 MHz)
 
 #### Forwarding in ID stage
 
 max_tt_025C_1v80: 0.094
-
-t_ex = 6.25 ns (160 MHz)
 t_id = 4.9 ns (204 MHz)
 28% higher fmax!
+
+FPGA (5 ns constr) slack: -0.178 ns (193 MHz)
+
+#### Chisel Versions
+
+ * with ID stage forwarding
+ * with ALU in a Chisel switch statement or Vec
+
+Clock 5 ns (200 MHz)
+
+Chisel 3.6, with emitVerilog
+Generates `? :` pririty muxes (probably the old Verilog emitter)
+max_tt_025C_1v80: 0.094
+Chisel 3.6 with emitSystemVerilogFile
+Generates `if` `else if` priority muxes (probably via CIRCT)
+max_tt_025C_1v80: 0.0098 (less slack than emitVerilog)
+
+Chisel 5 
+emitVerilog fails as it generates `automatic` variables, which yosys does not like, maybe Vivado and Quartus would accept it. Therefore, use emitSystemVerilogFile to have CIRCT options
+max_tt_025C_1v80: 0.0098 (same as Chisel 3.6 with emitSystemVerilogFile)
+
+Chisel 6
+max_tt_025C_1v80: -0.126 This is a regression compared to Chisel 5
+
+**With Vec instead of switch**
+
+Chisel 3.6 emitVerilog: leads to same ? : chain: max_tt_025C_1v80: -1.62 (32 % regression!)
+**TODO: needs investigation!** maybe this in line 17: `  wire [62:0] _res_res_2_T_1 = _GEN_0 << decExReg_rs2Val[4:0];`
+Check switch again, with `res := (a << b(4, 0))(31, 0)` gives less 62 bit signals, slack now max_tt_025C_1v80: 0.135!
+With Vec and `res(SLL.id.U) := (a << b(4, 0))(31, 0)`, ony one 62 bit signal, still: max_tt_025C_1v80: -1.62
+Chisel 3.6 emitSystemVerilogFile: translated now to a casez: max_tt_025C_1v80: -1.29 (still 26 % regression)
+
+Chisel 5: max_tt_025C_1v80: -1.29
+Chisel 6: max_tt_025C_1v80: 0.17 (best result!)
+
+**Manual Verilog Changes**
+
+droppping the not needed casez: max_tt_025C_1v80: -0.035!!!
+
+Use only 32 bits in shift left: max_tt_025C_1v80: 0.17
+Shift right signal only 5 bits: max_tt_025C_1v80: 0.17
+
 
 ## Wildcat synth results:
 
@@ -92,12 +135,6 @@ Looks like the Verilog memory definition is more efficient than the register arr
 Probably because of the priority mux definition of the generated Verilog code.
 
 ### 8 July 2025
-
-Better define the steps for fmax:
-
-`make APP=asm/apps/blink.s app hw-fmax synth-fmax`
-
-not really needed, as fmax does not use any app.
 
 1340 LUTs, 310 FFs
 Slack (VIOLATED) :        -0.400ns  (required time - arrival time)

@@ -5,6 +5,7 @@ scalacOptions ++= Seq(
 )
 
 Compile / unmanagedSourceDirectories += baseDirectory.value / "soc-comm/src"
+Compile / unmanagedSourceDirectories += baseDirectory.value / "ip-contributions/src"
 
 
 // Chisel 3.5
@@ -16,13 +17,17 @@ libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "0.5.6"
 libraryDependencies += "edu.berkeley.cs" % "ip-contributions" % "0.5.4"
 */
 
+
 scalaVersion := "2.13.14"
 val chiselVersion = "3.6.1"
 addCompilerPlugin("edu.berkeley.cs" %% "chisel3-plugin" % chiselVersion cross CrossVersion.full)
 libraryDependencies += "edu.berkeley.cs" %% "chisel3" % chiselVersion
 libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "0.6.2"
-libraryDependencies += "edu.berkeley.cs" % "ip-contributions" % "0.6.1"
 
+
+/*
+libraryDependencies += "edu.berkeley.cs" % "ip-contributions" % "0.6.1"
+*/
 
 /*
 scalaVersion := "2.13.14"
@@ -36,15 +41,20 @@ libraryDependencies += "net.fornwall" % "jelf" % "0.9.0"
 
 /*
 scalaVersion := "2.13.14"
-val chiselVersion = "6.5.0"
+val chiselVersion = "6.7.0"
 addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full)
 libraryDependencies += "org.chipsalliance" %% "chisel" % chiselVersion
 libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "6.0.0"
 libraryDependencies += "net.fornwall" % "jelf" % "0.9.0"
 */
 
-
-
+/*
+scalaVersion := "2.13.16"
+val chiselVersion = "7.0.0"
+addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full)
+libraryDependencies += "org.chipsalliance" %% "chisel" % chiselVersion
+// libraryDependencies += "edu.berkeley.cs" %% "chiseltest" % "6.0.0"
+*/
 
 libraryDependencies += "net.fornwall" % "jelf" % "0.9.0"
 libraryDependencies += "com.fazecast" % "jSerialComm" % "[2.0.0,3.0.0)"
