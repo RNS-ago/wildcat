@@ -50,6 +50,11 @@ libraryDependencies += "net.fornwall" % "jelf" % "0.9.0"
 libraryDependencies += "com.fazecast" % "jSerialComm" % "[2.0.0,3.0.0)"
 
 
+
+
+libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.4.0"
+
+
 // because I am reusing a.out -- should go with a change in compilation
 Test / parallelExecution := false
 

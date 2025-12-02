@@ -32,7 +32,7 @@ class CACoSimTest extends AnyFlatSpec with ChiselScalatestTester {
             for (i <- 0 until 32) {
               val r = d.io.regFile(i).peekInt().toInt
               val e = sim.reg(i)
-              assert(r == e, f"reg($i) = 0x${r.toHexString}, expected 0x${e.toHexString} at ${sim.pc % 4} in $f")
+              assert(r == e._2, f"reg($i) = 0x${r.toHexString}, expected 0x${e._2.toHexString} at ${sim.pc % 4} in $f")
             }
           }
         }

@@ -120,7 +120,7 @@ object Functions {
           aluOp := SUB.id.U
         }
       }
-      is(F3_SLL.U) {
+      is(F3_SLL_SRP.U) {
         aluOp := SLL.id.U
       }
       is(F3_SLT.U) {
