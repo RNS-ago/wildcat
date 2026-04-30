@@ -39,6 +39,26 @@ object Util {
     }
     arr
   }
+
+  private def byteToDoubleWord(byteArray: Array[Byte]): Array[Long] = {
+    val arr = new Array[Long](math.max(1, byteArray.length / 8))
+
+    if (byteArray.length == 0) {
+      arr(0) = 0L
+    }
+
+    // little endian
+    for (i <- 0 until byteArray.length / 8) {
+      var dword = 0L
+      for (j <- 0 until 8) {
+        dword >>>= 8
+        dword += (byteArray(i * 8 + j).toLong & 0xffL) << 56
+      }
+      arr(i) = dword
+    }
+    arr
+  }
+
   /**
    * Read a binary file into an array vector
    */
@@ -97,6 +117,37 @@ object Util {
     }
     mem
   }
+
+  def readElf64(fileName: String): (Array[Long], Long, Long) = {
+    val elf = ElfFile.from(new File(fileName))
+    if (elf.is32Bits() || elf.e_machine != 0xf3) throw new Exception("Not a RV64I executable")
+
+    val textSection = elf.firstSectionByName(".text")
+    val text = byteToDoubleWord(textSection.getData)
+    val textStart = textSection.header.sh_addr / 8
+    val textStop = textStart + text.length
+    val dataSection = elf.firstSectionByName(".data")
+    printf(text.mkString("Array(", ", ", ")"))
+
+    val textmem = new Array[Long]((textStart + text.length).toInt)
+    for (i <- text.indices) {
+      textmem((textStart + i).toInt) = text(i)
+    }
+    if (dataSection == null) return (textmem, textStart, textStop)
+
+    val data = byteToDoubleWord(dataSection.getData)
+    val dataStart = dataSection.header.sh_addr / 8
+    val length = dataStart + data.length
+    val mem = new Array[Long](length.toInt)
+    for (i <- text.indices) {
+      mem((textStart + i).toInt) = text(i)
+    }
+    for (i <- data.indices) {
+      mem((dataStart + i).toInt) = data(i)
+    }
+   ( mem, textStart, textStop)
+  }
+
 
   def getCode(name: String): (Array[Int], Int) = {
     val (code, start) =

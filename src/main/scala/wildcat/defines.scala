@@ -14,21 +14,23 @@ object Opcode {
   val System = 0x73
   val Tag = 0x0b
 }
-
-object dTag {
-  val UNSIGNED_BYTE = 0b000
-  val SIGNED_BYTE   = 0b001
-  val UNSIGNED_HALF = 0b010
-  val SIGNED_HALF   = 0b011
-  val UNSIGNED_WORD = 0b100
-  val SIGNED_WORD   = 0b101
-  val NONE          = 0xff
+  
+  object dTag {
+    val u8    = 0b000
+  val i8    = 0b001
+  val u16   = 0b010
+  val i16   = 0b011
+  val u32   = 0b100
+  val i32   = 0b101
+  val u64   = 0b110
+  val i64   = 0b111
+  val NONE  = 0xff
 }
 
 object C_opcode {
-  val C_ADDI4SPN, C_FLD, C_LW, C_ST = 0b00
+  val C_ADDI4SPN, C_FLD, C_LW, C_LD, C_ST = 0b00
   val C_J, C_JAL, C_BEQZ, C_BNEZ, C_LI, C_LUI, C_ADDI, C_ADDI16SP, C_SRPI, C_SRLI, C_SRAI, C_ANDI, C_AND, C_OR, C_XOR, C_SUB, C_NOP = 0b01
-  val C_LWSP, C_STSP, C_JR, C_JALR, C_SLLI, C_MV, C_ADD, C_EBREAK, C_CAST = 0b10
+  val C_LWSP, C_LDSP, C_STSP, C_JR, C_JALR, C_SLLI, C_MV, C_ADD, C_EBREAK, C_CAST = 0b10
 }
 
 
@@ -43,7 +45,7 @@ object C_funct3 {
   val C_ADDI4SPN, C_NOP, C_ADDI, C_SLLI                                                               = 0b000
   val C_JAL                                                                                           = 0b001
   val C_LWSP, C_LW, C_LI                                                                              = 0b010
-  val C_LUI, C_ADDI16SP                                                                               = 0b011
+  val C_LUI, C_ADDI16SP, C_LD, C_LDSP                                                                       = 0b011
   val C_JR, C_MV, C_JALR, C_ADD, C_EBREAK, C_SRPI, C_SRLI, C_SRAI, C_ANDI, C_AND, C_OR, C_XOR, C_SUB  = 0b100
   val C_J                                                                                             = 0b101
   val C_BEQZ, C_STSP, C_ST                                                                            = 0b110
@@ -131,12 +133,14 @@ object BranchFunct3 {
 }
 
 object LoadStoreFunct3 {
-  val LB = 0x00
-  val LH = 0x01
-  val LW = 0x02
-  val LBU = 0x04
-  val LHU = 0x05
-  val LWU = 0x06
+  val LB = 0b000
+  val LH = 0b001
+  val LW = 0b010
+  val LD = 0b011
+  val LBU = 0b100
+  val LHU = 0b101
+  val LWU = 0b110
+  val LDU = 0b111
   val SB, ST = 0x00
   val SH = 0x01
   val SW = 0x02

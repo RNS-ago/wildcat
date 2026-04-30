@@ -12,6 +12,7 @@
 package wildcat.isasim
 
 import net.fornwall.jelf.ElfFile
+import utest.TestRunner
 import wildcat.Opcode._
 import wildcat.AluFunct3._
 import wildcat.AluFunct7._
@@ -21,15 +22,15 @@ import wildcat.CSRFunct3._
 import wildcat.TagFunct3._
 import wildcat.InstrType._
 import wildcat.CSR._
-import wildcat.Util
+import wildcat.{Util, dTag}
 import wildcat.dTag._
 
-class SimRV(mem: Array[Int], start: Int, stop: Int) {
+class SimRV(mem: Array[Long], start: Long, stop: Long) {
 
   // That's the state of the processor.
   // That's it, nothing else (except memory ;-)
   var pc = start // RISC-V tests start at 0x200
-  val reg = Array.fill(32)((0xff, 0))
+  val reg = Array.fill(32)((i8, 0L))
 
   // Reservation state for LR/SC
   var reservationValid = false
@@ -101,7 +102,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
         (imm10_5 << 5) | (imm4_1 << 1) | imm0
     }
     // Do some decoding: extraction of decoded fields
-    val (opcode, rd, rs1, rs2, funct3, funct7, imm): (Int, Int, Int, Int, Int, Int, Int) = if (instr_length == 4) {
+    val (opcode, rd, rs1, rs2, funct3, funct7, imm) : (Int, Int, Int, Int, Int, Int, Int) = if (instr_length == 4) {
       (instr & 0x7f,
       (instr >> 7) & 0x01f,
       (instr >> 15) & 0x01f,
@@ -123,7 +124,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
 
 
 
-    def explicitCast(old_tag: Int, value: Int, new_tag: Int): Int = {
+    def explicitCast(old_tag: Int, value: Long, new_tag: Int): Long = {
       val old_tag_signedness = tagSignedness(old_tag)
       val new_tag_signedness = tagSignedness(new_tag)
 
@@ -135,8 +136,8 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       val old_tag_bit_mask  = tagSizeBitMask(old_tag)
       val new_tag_bit_mask  = tagSizeBitMask(new_tag)
 
-      val downcast_sign_bit       = 1 << (new_tag_bit_width - 1)
-      val upcast_sign_bit         = 1 << (old_tag_bit_width - 1)
+      val downcast_sign_bit       = 1L << (new_tag_bit_width - 1)
+      val upcast_sign_bit         = 1L << (old_tag_bit_width - 1)
       val downcast_extension_mask = ~new_tag_bit_mask
       val upcast_extension_mask   = ~old_tag_bit_mask
       val downcast_masked         = value & new_tag_bit_mask
@@ -175,7 +176,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def implicitCast(tag1: Int, val1: Int, tag2: Int, val2: Int) = {
+    def implicitCast(tag1: Int, val1: Long, tag2: Int, val2: Long) = {
       var common_tag: Int = 0
       val tag1_unsigned = isUnsigned(tag1)
       val tag2_unsigned = isUnsigned(tag2)
@@ -224,8 +225,8 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
     def tagSizeBitWidth(tag: Int): Int = {
       math.pow(2,tagSize(tag)).toInt*8
     }
-    def tagSizeBitMask(tag: Int): Int = {
-      (math.pow(2, tagSizeBitWidth(tag)).toLong - 1).toInt
+    def tagSizeBitMask(tag: Int): Long = {
+      math.pow(2, tagSizeBitWidth(tag)).toLong - 1
     }
     def tagMutilpy(tag1: Int, tag2: Int, common_tag: Int): (Int, Int) = {
       val tag_sum = tagSizeBitWidth(tag1) + tagSizeBitWidth(tag2)
@@ -233,15 +234,15 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
 
       val (lower_tag, upper_tag): (Int, Int) =
         if (tag_sum == 16) {
-          (UNSIGNED_HALF | tag_signedness, NONE)
+          (u16 | tag_signedness, NONE)
         } else if (tag_sum <= 32) {
-          (UNSIGNED_WORD | tag_signedness, NONE)
+          (u32 | tag_signedness, NONE)
         } else if (tag_sum <= 40) {
-          (UNSIGNED_WORD | tag_signedness, UNSIGNED_BYTE | tag_signedness)
+          (u32 | tag_signedness, u8 | tag_signedness)
         } else if (tag_sum <= 48) {
-          (UNSIGNED_WORD | tag_signedness, UNSIGNED_HALF | tag_signedness)
+          (u32 | tag_signedness, u16 | tag_signedness)
         } else if (tag_sum <= 64) {
-          (UNSIGNED_WORD | tag_signedness, UNSIGNED_WORD | tag_signedness)
+          (u32 | tag_signedness, u32 | tag_signedness)
         } else {
           (NONE, NONE)
         }
@@ -268,76 +269,90 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
     // single bit on extended function - this is not nice
     val sraSub = funct7 == SRP_SUB && (opcode == Alu || (opcode == AluImm && funct3 == F3_SRL_SRA))
 
-    def alu(funct3: Int, funct7: Int, sraSub: Boolean, op1: Int, tag1: Int, op2: Int, tag2: Int): (Int, Int) = {
+    def alu(funct3: Int, funct7: Int, sraSub: Boolean, op1: Long, tag1: Int, op2: Long, tag2: Int): (Int, Long) = {
       if ((tag1 & 0x1) != (tag2 & 0x1)  & debug) {
         throw new RuntimeException(s"both tags dont match in terms of signed/unsigned. tag1: $tag1 doesn't match tag2: $tag2")
       }
 
-      val (common_tag, casted_op1, casted_op2): (Int, Int, Int) = implicitCast(tag1, op1, tag2, op2)
+      val (common_tag, casted_op1, casted_op2): (Int, Long, Long) = implicitCast(tag1, op1, tag2, op2)
       val (lower_tag, upper_tag): (Int, Int) = tagMutilpy(tag1, tag2, common_tag)
 
-      val shamt = math.abs(op2) & 0x1f
-      val tagd = math.max(tag1 & 0b110, tag2 & 0b110) | (tag1 & 0b1)
-      funct7 match {
-        case MUL_DIV =>
+      val shamt = math.abs(op2)// & (tagSizeBitWidth(tag1) - 1)
+
+      val u64_mask = BigInt("FFFFFFFFFFFFFFFF", 16)
+      //val tagd = math.max(tag1 & 0b110, tag2 & 0b110) | (tag1 & 0b1)
+      (funct7, opcode) match {
+        case (MUL_DIV, Alu) =>
           funct3 match {
-            case F3_MUL => (lower_tag, (op1.toLong * op2.toLong).toInt)
+            case F3_MUL =>
+              if (tagSizeBitWidth(tag1) <= 32 & tagSizeBitWidth(tag2) <= 32) {
+                (lower_tag, (((op1 * op2) & 0xffffffff) << 32) >> 32)
+              } else {
+                (lower_tag, op1 * op2)
+              }
             case F3_MULH =>
               (isUnsigned(tag1), isUnsigned(tag2)) match {
-                case (true, true) => (upper_tag, (((op1 & 0xffffffffL) * (op2 & 0xffffffffL)) >>> 32).toInt) //MULHU
-                case (false, true) => (upper_tag, ((op1.toLong * (op2 & 0xffffffffL)) >>> 32).toInt) //MULHSU
-                case (true, false) => (upper_tag, ((op2.toLong * (op1 & 0xffffffffL)) >>> 32).toInt) //MULHSU
-                case (false, false) => (upper_tag, ((op1.toLong * op2.toLong) >>> 32).toInt) //MULH
+                case (true, true)   => (upper_tag, (((BigInt(op1) & u64_mask) * (BigInt(op2) & u64_mask)) >> 64).toLong) //MULHU
+                case (false, true)  => (upper_tag, ((BigInt(op1) * (BigInt(op2) & u64_mask)) >> 64).toLong) //MULHSU
+                case (true, false)  => (upper_tag, ((BigInt(op2) * (BigInt(op1) & u64_mask)) >> 64).toLong) //MULHSU
+                case (false, false) => (upper_tag, ((BigInt(op1) * BigInt(op2)) >> 64).toLong) //MULH
               }
             case F3_DIV =>
               if (casted_op2 == 0) {
                 (common_tag, -1)
               }
-              else if (casted_op1 == Int.MinValue & casted_op2 == -1 & isSigned(common_tag)) {
-                (common_tag, Int.MinValue)
+              else if (casted_op1 == Long.MinValue & casted_op2 == -1 & isSigned(common_tag)) {
+                (common_tag, Long.MinValue)
               }
-              else if (isUnsigned(common_tag)) {
-                //DIVU
-                (common_tag, ((casted_op1 & 0xffffffffL) / (casted_op2 & 0xffffffffL)).toInt)
-              } else {
-                //DIV
-                (common_tag, casted_op1 / casted_op2)
+              else {
+                (isSigned(common_tag), tagSizeBitWidth(common_tag)) match {
+                  case (true, 64)   => (common_tag, casted_op1 / casted_op2)                                                    //DIV
+                  case (true, _)    => (common_tag, (casted_op1.toInt / casted_op2.toInt).toLong)                               //DIVW
+                  case (false, 64)  => (common_tag, ((BigInt(casted_op1) & u64_mask) / (BigInt(casted_op2) & u64_mask)).toLong) //DIVU
+                  case (false, _)   => (common_tag, (casted_op1 & 0xffffffffL) / (casted_op2 & 0xffffffffL))                    //DIVUW
+                }
               }
-            //case F3_DIVU => (tagd, ((op1 & 0xffffffffL) / (op2 & 0xffffffffL)).toInt)
             case F3_REM =>
               if (casted_op2 == 0) {
                 (common_tag, casted_op1)
               }
-              else if (casted_op1 == Int.MinValue & casted_op2 == -1 & isSigned(common_tag)) {
+              else if (casted_op1 == Long.MinValue & casted_op2 == -1 & isSigned(common_tag)) {
                 (common_tag, 0)
               }
-              else if (isUnsigned(tag1) & isUnsigned(tag1)) {
-                (common_tag, ((casted_op1 & 0xffffffffL) % (casted_op2 & 0xffffffffL)).toInt)
-              } else {
-                (common_tag, casted_op1 % casted_op2)
+              else {
+                (isSigned(common_tag), tagSizeBitWidth(common_tag)) match {
+                  case (true, 64)   => (common_tag, casted_op1 % casted_op2)                                                    //REM
+                  case (true, _)    => (common_tag, (casted_op1.toInt / casted_op2.toInt).toLong)                               //REMW
+                  case (false, 64)  => (common_tag, ((BigInt(casted_op1) & u64_mask) % (BigInt(casted_op2) & u64_mask)).toLong) //REMU
+                  case (false, _)   => (common_tag, (casted_op1 & 0xffffffffL) % (casted_op2 & 0xffffffffL))                    //REMUW
+                }
               }
-            //case F3_REMU => (tagd, ((op1 & 0xffffffffL) % (op2 & 0xffffffffL)).toInt)
           }
-        case SRP_SUB =>
+        case (SRP_SUB,_) =>
           funct3 match {
             case F3_ADD_SUB => (common_tag, explicitCast(common_tag, casted_op1 - casted_op2, common_tag))
-            case F3_SLL_SRP =>
+            case F3_SRL_SRA =>
               if (isSigned(tag1)) {
-                (tag1, op1 >> shamt)
+                (tag1, (op1 >> shamt) & tagSizeBitMask(tag1))
               } else {
-                (tag1, op1 >>> shamt)
+                (tag1, (op1 >>> shamt) & tagSizeBitMask(tag1))
               }
           }
         case _ =>
           funct3 match {
             case F3_ADD_SUB => (common_tag, explicitCast(common_tag, casted_op1 + casted_op2, common_tag))
-            case F3_SLL_SRP => (tag1, op1 << shamt)
-
+            case F3_SLL_SRP => (tag1, (op1 << shamt) & tagSizeBitMask(tag1))
+            case F3_SRL_SRA =>
+              if (isSigned(tag1)) {
+                (tag1, (op1 >> shamt) & tagSizeBitMask(tag1))
+              } else {
+                (tag1, (op1 >>> shamt) & tagSizeBitMask(tag1))
+              }
             case F3_SLT =>
               if (isSigned(common_tag)) {
-                if (casted_op1 < casted_op2) (UNSIGNED_BYTE, 1) else (UNSIGNED_BYTE, 0)
+                if (casted_op1 < casted_op2) (u8, 1) else (u8, 0)
               } else {
-                if ((casted_op1 < casted_op2) ^ (casted_op1 < 0) ^ (casted_op2 < 0)) (UNSIGNED_BYTE, 1) else (UNSIGNED_BYTE, 0)
+                if ((casted_op1 < casted_op2) ^ (casted_op1 < 0) ^ (casted_op2 < 0)) (u8, 1) else (u8, 0)
               }
             // output tag not inhereted to prevent any accidental leakage of information, unsigned byte choses as the smallest datatype that can represent 0 or 1
             case F3_XOR => (common_tag, casted_op1 ^ casted_op2)
@@ -347,12 +362,12 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def compare(funct3: Int, op1: Int, tag1: Int, op2: Int, tag2: Int): Boolean = {
+    def compare(funct3: Int, op1: Long, tag1: Int, op2: Long, tag2: Int): Boolean = {
       if ((tag1 & 0x1) != (tag2 & 0x1)  & debug) {
         throw new RuntimeException(s"both tags dont match in terms of signed/unsigned. tag1: $tag1 doesn't match tag2: $tag2")
       }
 
-      val (common_tag, casted_op1, casted_op2): (Int, Int, Int) = implicitCast(tag1, op1, tag2, op2)
+      val (common_tag, casted_op1, casted_op2): (Int, Long, Long) = implicitCast(tag1, op1, tag2, op2)
 
       funct3 match {
         case BEQ => casted_op1 == casted_op2
@@ -372,29 +387,20 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def load(funct3: Int, base: Int, displ: Int): (Int, Int) = {
-      val addr = ((base + displ) & 0xfffff) // 1 MB wrap around
-      val data = mem(addr >>> 2)
-
-      val (tagWordRelativeAddr, tagByteOffset, valueWordRelativeAddr): (Int, Int, Int) = taggedRegisterLocator(displ)
-
-      val tagAddr       = base + tagWordRelativeAddr
-      val tagWordAddr   = tagAddr >> 2
-      val valueAddr     = base + valueWordRelativeAddr
-      val valueWordAddr = valueAddr >> 2
-
-      val shift = 8 * tagByteOffset
-
-      val tag   = (mem(tagWordAddr) >> shift) & 0xff
-      val value = mem(valueWordAddr)
+    def load(funct3: Int, base: Int, displ: Int): (Int, Long) = {
+      val addr = (base + displ)
+      val dword = mem(addr >>> 3)
+      val byteOffset = addr & 0x07
 
       funct3 match {
-        case LB   =>  (SIGNED_BYTE,     (((data >> (8 * (addr & 0x03))) & 0xff)   << 24) >> 24)
-        case LH   =>  (SIGNED_HALF,     (((data >> (8 * (addr & 0x03))) & 0xffff) << 16) >> 16)
-        case LW   =>  (SIGNED_WORD,     data)
-        case LBU  =>  (UNSIGNED_BYTE,   (data   >> (8 * (addr & 0x03))) & 0xff)
-        case LHU  =>  (UNSIGNED_HALF,   (data   >> (8 * (addr & 0x03))) & 0xffff)
-        case LWU  =>  (UNSIGNED_WORD,   data)
+        case LB  => (i8,  ((dword >> (8 * byteOffset)) << 56) >> 56)
+        case LH  => (i16, ((dword >> (8 * (byteOffset & 0x06))) << 48) >> 48)
+        case LW  => (i32, ((dword >> (8 * (byteOffset & 0x04))) << 32) >> 32)
+        case LD  => (i64, dword)
+        case LBU => (u8,  (dword >> (8 * byteOffset)) & 0xffL)
+        case LHU => (u16, (dword >> (8 * (byteOffset & 0x06))) & 0xffffL)
+        case LWU => (u32, (dword >> (8 * (byteOffset & 0x04))) & 0xffffffffL)
+        case LDU => (u64, dword)
       }
     }
 
@@ -412,12 +418,12 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       funct3 match {
         case ST =>
           tag match {
-            case SIGNED_BYTE | UNSIGNED_BYTE | SIGNED_HALF | UNSIGNED_HALF =>
+            case `i8` | `u8` | `i16` | `u16` =>
               val shift = 8 * (addr & 0x03)
               val source_mask = tagSizeBitMask(tag)
               val destination_mask = ~(source_mask << shift)
               mem(wordAddr) = (mem(wordAddr) & destination_mask) | ((value & source_mask) << shift)
-            case SIGNED_WORD | UNSIGNED_WORD =>
+            case `i32` | `u32` =>
               if (addr == 0xf0000004) {
                 println("out: " + value.toChar)
               } else {
@@ -482,7 +488,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def cast(funct3: Int, rs1: Int, rs1_tag: Int, new_tag: Int): (Int, Int) = {
+    def cast(funct3: Int, rs1: Long, rs1_tag: Int, new_tag: Int): (Int, Long) = {
 
       funct3 match {
         case CAST   => (new_tag, explicitCast(rs1_tag, rs1, new_tag))
@@ -490,7 +496,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def spillReload(funct3: Int, base: Int, displ: Int, tag: Int, value: Int): (Int, Int) = {
+    def spillReload(funct3: Int, base: Int, displ: Int, tag: Int, value: Int): (Int, Long) = {
       val (tagRelativeWordAddr, tagByteOffset, valueRelativeAddr): (Int, Int, Int) = taggedRegisterLocator(displ)
 
       val wordBase = base >>> 2
@@ -500,12 +506,12 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
 
       funct3 match {
         case LTR =>
-          val tag = (mem(tagWordAddr) >> shift) & 0xff
+          val tag = ((mem(tagWordAddr) >> shift) & 0xff).toInt
           val value = mem(valueWordAddr)
 
           (tag, value)
         case STR =>
-          val source_mask = tagSizeBitMask(UNSIGNED_BYTE)
+          val source_mask = tagSizeBitMask(u8)
           val destination_mask = ~(source_mask << shift)
 
           mem(tagWordAddr) = (mem(tagWordAddr) & destination_mask) | ((tag & source_mask) << shift)
@@ -514,55 +520,55 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       }
     }
 
-    def atomic(funct5: Int, addr: Int, rs2Val: Int): (Int, Boolean) = {
-      if ((addr & 0x3) != 0) {
-        throw new Exception(f"Misaligned atomic address: 0x${addr}%08x")
-      }
-      val wordAddr = addr >>> 2
-      val oldValue = mem(wordAddr)
-      
-      funct5 match {
-        case 0x02 => { // LR.W
-          reservationValid = true
-          reservationAddr = addr
-          (oldValue, true)
-        }
-        case 0x03 => { // SC.W
-          if (reservationValid && reservationAddr == addr) {
-            mem(wordAddr) = rs2Val
-            reservationValid = false
-            (0, true) // Success: return 0
-          } else {
-            (1, true) // Failure: return non-zero
-          }
-        }
-        case 0x01 => { // AMOSWAP.W
-          mem(wordAddr) = rs2Val
-          (oldValue, true)
-        }
-        case 0x00 => { // AMOADD.W
-          val result = oldValue + rs2Val
-          mem(wordAddr) = result
-          (oldValue, true)
-        }
-        case 0x04 => { // AMOXOR.W
-          val result = oldValue ^ rs2Val
-          mem(wordAddr) = result
-          (oldValue, true)
-        }
-        case 0x0C => { // AMOAND.W
-          val result = oldValue & rs2Val
-          mem(wordAddr) = result
-          (oldValue, true)
-        }
-        case 0x08 => { // AMOOR.W
-          val result = oldValue | rs2Val
-          mem(wordAddr) = result
-          (oldValue, true)
-        }
-        case _ => (0, false)
-      }
-    }
+    //def atomic(funct5: Int, addr: Int, rs2Val: Int): (Int, Boolean) = {
+    //  if ((addr & 0x3) != 0) {
+    //    throw new Exception(f"Misaligned atomic address: 0x${addr}%08x")
+    //  }
+    //  val wordAddr = addr >>> 2
+    //  val oldValue = mem(wordAddr)
+    //
+    //  funct5 match {
+    //    case 0x02 => { // LR.W
+    //      reservationValid = true
+    //      reservationAddr = addr
+    //      (oldValue, true)
+    //    }
+    //    case 0x03 => { // SC.W
+    //      if (reservationValid && reservationAddr == addr) {
+    //        mem(wordAddr) = rs2Val
+    //        reservationValid = false
+    //        (0, true) // Success: return 0
+    //      } else {
+    //        (1, true) // Failure: return non-zero
+    //      }
+    //    }
+    //    case 0x01 => { // AMOSWAP.W
+    //      mem(wordAddr) = rs2Val
+    //      (oldValue, true)
+    //    }
+    //    case 0x00 => { // AMOADD.W
+    //      val result = oldValue + rs2Val
+    //      mem(wordAddr) = result
+    //      (oldValue, true)
+    //    }
+    //    case 0x04 => { // AMOXOR.W
+    //      val result = oldValue ^ rs2Val
+    //      mem(wordAddr) = result
+    //      (oldValue, true)
+    //    }
+    //    case 0x0C => { // AMOAND.W
+    //      val result = oldValue & rs2Val
+    //      mem(wordAddr) = result
+    //      (oldValue, true)
+    //    }
+    //    case 0x08 => { // AMOOR.W
+    //      val result = oldValue | rs2Val
+    //      mem(wordAddr) = result
+    //      (oldValue, true)
+    //    }
+    //    case _ => (0, false)
+    //  }
+    //}
 
 
     // read register tags and values
@@ -583,7 +589,7 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
 
     // Execute the instruction and return a tuple for the result:
     //   (ALU result, writeBack, next PC)
-    val result: ((Int, Int), Boolean, Int) = opcode match {
+    val result: ((Int, Long), Boolean, Long) = opcode match {
       //case 0x2f => { // AMO - Atomic Memory Operations
       //  val addr = rs1Val
       //  if (funct3 != 0x2) {
@@ -593,22 +599,22 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
       //  val (value, success) = atomic(funct5, addr, rs2Val)
       //  (value, success, pcNext)
       //}
-      case AluImm => (alu(funct3, funct7, sraSub, rs1Val, rs1Tag, imm, SIGNED_WORD), true, pcNext)
+      case AluImm => (alu(funct3, funct7, sraSub, rs1Val, rs1Tag, imm, i16), true, pcNext)
       case Alu => (alu(funct3, funct7, sraSub, rs1Val, rs1Tag, rs2Val, rs2Tag), true, pcNext)
       case Branch => ((NONE, 0), false, if (compare(funct3, rs1Val, rs1Tag, rs2Val, rs2Tag)) pc + imm else pcNext)
-      case Load => (load(funct3, rs1Val, imm), true, pcNext)
-      case Store => store(funct3, rs1Val, imm, rs2Tag, rs2Val); ((NONE, 0), false, pcNext)
-      case Lui => ((SIGNED_WORD, imm), true, pcNext)
-      case AuiPc => ((UNSIGNED_WORD, pc + imm), true, pcNext)
-      case Jal => ((UNSIGNED_WORD, pc + 4), true, pc + imm)
-      case JalR => ((UNSIGNED_WORD, pc + 4), true, (rs1Val + imm) & 0xfffffffe)
+      case Load => (load(funct3, rs1Val.toInt, imm), true, pcNext)
+      case Store => store(funct3, rs1Val.toInt, imm, rs2Tag, rs2Val.toInt); ((NONE, 0), false, pcNext)
+      case Lui => ((i32, imm), true, pcNext)
+      case AuiPc => ((u32, pc + imm), true, pcNext)
+      case Jal => ((u32, pc + 4), true, pc + imm)
+      case JalR => ((u32, pc + 4), true, (rs1Val + imm) & 0xfffffffe)
       case Fence => ((NONE, 0), false, pcNext)
-      case System => ((UNSIGNED_WORD, ecall()), true, pcNext)
+      case System => ((u32, ecall()), true, pcNext)
       case Tag =>
         funct3 match {
           case CAST | CAST_T => (cast(funct3, rs1Val, rs1Tag, imm), true, pcNext)
-          case LTR => (spillReload(funct3,rs1Val, imm, NONE, 0), true, pcNext)
-          case STR => (spillReload(funct3,rs1Val, imm, rs2Tag, rs2Val), false, pcNext)
+          case LTR => (spillReload(funct3,rs1Val.toInt, imm, NONE, 0), true, pcNext)
+          case STR => (spillReload(funct3,rs1Val.toInt, imm, rs2Tag, rs2Val.toInt), false, pcNext)
         }
 
       case _ => throw new Exception("Opcode " + opcode + " at " + pc + " not (yet) implemented")
@@ -634,13 +640,13 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
   // ---- Compressed Instruction Logic -----
 
   def fetchByte(addr: Int): Int = {
-    val word = mem(addr >>> 2)
-    (word >> ((addr & 0x03) * 8)) & 0xff
+    val dword = mem(addr >>> 3)
+    ((dword >> ((addr & 0x07) * 8)) & 0xff).toInt
   }
   def fetchHalf(addr: Int): Int = {
     val b0 = fetchByte(addr)
     val b1 = fetchByte(addr + 1)
-    (b1 << 8) | b0
+    ((b1 << 8) | b0).toInt
   }
 
   // enable to enforce strict type matching and disable implicit casting
@@ -650,13 +656,13 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
     var instruction_32bit = 0
     var instruction_length = 0
 
-    val first_16_bits = fetchHalf(pc)
+    val first_16_bits = fetchHalf(pc.toInt)
 
     // 32-bit instruction
     if ((first_16_bits & 0x03) == 0x03) {
       instruction_length = 4
 
-      val next_16_bits = fetchHalf(pc + 2)
+      val next_16_bits = fetchHalf((pc + 2).toInt)
       instruction_32bit = (next_16_bits << 16) | first_16_bits
     }
     // 16-bit instruction
@@ -667,17 +673,34 @@ class SimRV(mem: Array[Int], start: Int, stop: Int) {
 
     cont = execute(instruction_32bit, instruction_length)
 
+    print("\n")
+    print("regs:  iTag    : HexValue  : DecimalValue\n")
+    reg.zipWithIndex.foreach { case ((rTag, rVal), index) => printf("x%s:   %s %016x %d\n", index, iTag_to_string(rTag), rVal, rVal) }
+    print("")
+  }
+
+  def iTag_to_string(iTag: Int): String = {
+    iTag match {
+      case dTag.u8 => "u8"
+      case dTag.i8 => "i8"
+      case dTag.u16 => "u16"
+      case dTag.i16 => "i16"
+      case dTag.u32 => "u32"
+      case dTag.i32 => "i32"
+      case dTag.u64 => "u64"
+      case dTag.i64 => "i64"
+    }
   }
   print("\n")
   print("regs:  iTag    : HexValue  : DecimalValue\n")
-  reg.zipWithIndex.foreach { case ((rTag, rVal), index) => printf("x%s: %08x %08x %d\n", index, rTag, rVal, rVal) }
+  reg.zipWithIndex.foreach { case ((rTag, rVal), index) => printf("x%s:   %s %016x %d\n", index, iTag_to_string(rTag), rVal, rVal) }
 
 }
 
 object SimRV {
 
   def runSimRV(file: String) = {
-    val mem = new Array[Int](1024 * 256) // 1 MB, also check masking in load and store
+    val mem = new Array[Long](1024 * 256) // 1 MB, also check masking in load and store
 
     val (code, start) = Util.getCode(file)
 

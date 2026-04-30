@@ -64,6 +64,7 @@ object WorkflowParser extends Parsers {
       jTypeInstruction      |
       uTypeInstruction      |
       fenceTypeInstruction  |
+      pseudoInstruction     |
       // Compressed
       crTypeInstruction     |
       ciTypeInstruction     |
@@ -165,9 +166,11 @@ object WorkflowParser extends Parsers {
           case "lb"   => LoadStoreFunct3.LB
           case "lh"   => LoadStoreFunct3.LH
           case "lw"   => LoadStoreFunct3.LW
+          case "ld"   => LoadStoreFunct3.LD
           case "lbu"  => LoadStoreFunct3.LBU
           case "lhu"  => LoadStoreFunct3.LHU
           case "lwu"  => LoadStoreFunct3.LWU
+          case "ldu"   => LoadStoreFunct3.LDU
           case "ltr"   => TagFunct3.LTR
         }
         val opcode = instr match {
@@ -179,7 +182,7 @@ object WorkflowParser extends Parsers {
   }
 
   private def isLoad(name: String): Boolean = name match {
-    case "lb" | "lh" | "lw" | "lbu" | "lhu" | "lwu" | "ltr" => true
+    case "lb" | "lh" | "lw" | "ld" | "lbu" | "lhu" | "lwu" | "ldu" | "ltr" => true
     case _ => false
   }
 
@@ -306,6 +309,27 @@ object WorkflowParser extends Parsers {
   }
 
 
+  def pseudoInstruction: Parser[ImmArithAST] = positioned {
+    accept("pseudo instruction", {
+      case LITERAL(name) if pseudoInstruction(name) => name
+    }) ~ register ~ COMMA() ~ register ^^ {
+      case instr ~ rd ~ _ ~ rs1 =>
+        val func7_imm = instr match {
+          case "mv" => 0
+        }
+        val funct3 = instr match {
+          case "mv" => AluFunct3.F3_ADD_SUB
+        }
+        ImmArithAST(rd=rd.loc, funct3=funct3, rs1=rs1.loc, imm=func7_imm)
+    }
+  }
+
+  private def pseudoInstruction(name: String): Boolean = name match {
+    case "mv" => true
+    case _ => false
+  }
+
+
 
   // ============================================================================
   // COMPRESSED INSTRUCTION PARSERS
@@ -351,7 +375,8 @@ object WorkflowParser extends Parsers {
           case t: ITAG      => IMMEDIATE(t.name, t.encoded)
         }
         val (opcode, funct3, imm12, imm2_6) = instr match {
-          case "c.lwsp"     => (C_opcode.C_LWSP,      C_funct3.C_LWSP,   (imm.num >> 5) & 0b1, (((imm.num >> 2) & 0b111) << 2) | ((imm.num >> 6) & 0b11))
+          case "c.lwsp"     => (C_opcode.C_LWSP,      C_funct3.C_LWSP,      (imm.num >> 5) & 0b1, (((imm.num >> 2) & 0b111) << 2) | ((imm.num >> 6) & 0b11))
+          case "c.ldsp"     => (C_opcode.C_LDSP,      C_funct3.C_LDSP,      (imm.num >> 5) & 0b1, (((imm.num >> 3) & 0b11) << 3)  | ((imm.num >> 6) & 0b111))
           case "c.li"       => (C_opcode.C_LI,        C_funct3.C_LI,        (imm.num >> 5) & 0b1, imm.num & 0b11111)
           case "c.lui"      => (C_opcode.C_LUI,       C_funct3.C_LUI,       (imm.num >> 5) & 0b1, imm.num & 0b11111)
           case "c.addi"     => (C_opcode.C_ADDI,      C_funct3.C_ADDI,      (imm.num >> 5) & 0b1, imm.num & 0b11111)
@@ -370,7 +395,7 @@ object WorkflowParser extends Parsers {
   }
 
   private def isCIType(name: String): Boolean = name match {
-    case "c.lwsp" | "c.li" | "c.lui" | "c.addi" | "c.addi16sp" | "c.slli" | "c.cast" => true
+    case "c.lwsp" | "c.ldsp" | "c.li" | "c.lui" | "c.addi" | "c.addi16sp" | "c.slli" | "c.cast" => true
     case _ => false
   }
 
@@ -378,8 +403,8 @@ object WorkflowParser extends Parsers {
   def cssTypeInstruction: Parser[CSSTypeAST] = positioned {
     accept("CSS-type instruction", {
       case LITERAL(name) if isCSSType(name) => name
-    }) ~ register ~ COMMA() ~ immediate ^^ {
-      case instr ~ rs2 ~ _ ~ imm =>
+    }) ~ register ~ COMMA() ~ immediate ~ LPAREN() ~ register ~ RPAREN() ^^ {
+      case instr ~ rs2 ~ _ ~ imm ~ _ ~ _ ~ _ =>
         val (opcode, funct3, imm7_12) = instr match {
           case "c.stsp"     => (C_opcode.C_STSP,  C_funct3.C_STSP, (((imm.num >> 2) & 0b1111) << 2) | ((imm.num >> 6) & 0b11))
         }
@@ -418,13 +443,14 @@ object WorkflowParser extends Parsers {
       case instr ~ rd ~ _ ~ offset ~ _ ~ rs1 ~ _ =>
         val (opcode, funct3, imm5_6, imm10_12) = instr match {
           case "c.lw"     => (C_opcode.C_LW,  C_funct3.C_LW, (((offset.num >> 6) & 0b1) << 1) | ((offset.num >> 2) & 0b1), (offset.num >> 3) & 0b111)
+          case "c.ld"     => (C_opcode.C_LD,  C_funct3.C_LD, (offset.num >> 6) & 0b11, (offset.num >> 3) & 0b111)
         }
         CLTypeAST(opcode = opcode, funct3 = funct3, rd = rd.loc, rs1 = rs1.loc, imm5_6 = imm5_6, imm10_12 = imm10_12)
     }
   }
 
   private def isCLType(name: String): Boolean = name match {
-    case "c.lw" => true
+    case "c.lw" | "c.ld" => true
     case _ => false
   }
 
@@ -689,12 +715,14 @@ object WorkflowParser extends Parsers {
 
 
   private def iTagEncoder: PartialFunction[String, Int] = {
-    case "u_byte" => dTag.UNSIGNED_BYTE
-    case "s_byte" => dTag.SIGNED_BYTE
-    case "u_half" => dTag.UNSIGNED_HALF
-    case "s_half" => dTag.SIGNED_HALF
-    case "u_word" => dTag.UNSIGNED_WORD
-    case "s_word" => dTag.SIGNED_WORD
+    case "u8" => dTag.u8
+    case "i8" => dTag.i8
+    case "u16" => dTag.u16
+    case "i16" => dTag.i16
+    case "u32" => dTag.u32
+    case "i32" => dTag.i32
+    case "u64" => dTag.u64
+    case "i64" => dTag.i64
     case "none"   => dTag.NONE
   }
   // ============================================================================

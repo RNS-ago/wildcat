@@ -3,6 +3,8 @@ package wildcat.assembler.compiler
 import wildcat.assembler.lexer.WorkflowLexer
 import wildcat.assembler.parser._
 
+import scala.collection.mutable.ArrayBuffer
+
 
 object WorkflowCompiler {
   /**
@@ -30,29 +32,34 @@ object WorkflowCompiler {
 
       // Pass 2: Encode instructions
       val instructions = ast.filterNot(isLabel) // Filter out label definitions
-      val bin = new Array[Int](instructions.length)
-
+      val bin = ArrayBuffer.empty[Int]
       var pc: Int = 0
+      var compressedCount = 0
+      var uncompressedCount = 0
       for (instruction <- instructions) {
         instruction match {
           case c: CompressedAST =>
             val wordIndex = pc >> 2
             val byteOffset = (((pc & 0b11) >> 1) << 1) * 8
+            while (bin.size <= wordIndex) bin += 0
             bin(wordIndex) = (RISCVEncoder.encode(instruction, pc, symbols) << byteOffset) | bin(wordIndex)
             pc += 2
+            compressedCount += 1
           case _ =>
             val byteOffset = ((pc & 0b11) >> 1) << 1
             if (byteOffset == 2) {
-              pc +=2
+              pc += 2
             }
             val wordIndex = pc >> 2
+            while (bin.size <= wordIndex) bin += 0
             bin(wordIndex) = RISCVEncoder.encode(instruction, pc, symbols)
             pc += 4
+            uncompressedCount += 1
         }
-
       }
-
-      Right(bin)
+      println(s"NUMBER OF INSTRUCTIONS  - Compressed: $compressedCount, Uncompressed: $uncompressedCount, Total: ${compressedCount + uncompressedCount}")
+      println(s"NUMBER OF BYTES         - Compressed: ${compressedCount*2}, Uncompressed: ${uncompressedCount*4}, Total: ${(compressedCount*2) + (uncompressedCount*4)}")
+      Right(bin.toArray)
     } catch {
       case e: Exception => Left(CompilationError(e.getMessage))
     }
@@ -411,40 +418,163 @@ object RISCVEncoder {
 object CompilerExample {
   def main(args: Array[String]): Unit = {
     val code =
-      """# Basic arithmetic and movement
-        |c.li x1, 5
-        |addi x4, x3, 1
-        |c.li x2, 10
-        |c.add x1, x2        # x1 = x1 + x2 = 15
-        |c.mv x3, x1         # x3 = x1 = 15
+      """b_search:                               # @b_search
+        |# %bb.0:
+        |	c.addi16sp	sp, -80
+        |	c.stsp	ra, 72(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s0, 64(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s1, 56(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s2, 48(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s3, 40(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s4, 32(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s5, 24(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s6, 16(sp)                      # 8-byte Folded Spill
+        |	c.stsp	s7, 8(sp)                       # 8-byte Folded Spill
+        |	bge	zero, a2, .LBB0_6
+        |# %bb.1:                                # %.preheader
+        |	c.mv	s2, a4
+        |	c.mv	s3, a3
+        |	c.mv	s6, a2
+        |	c.mv	s4, a1
+        |	c.mv	s5, a0
+        |	c.li	s7, 0
+        |	c.j	.LBB0_3
+        |.LBB0_2:                                #   in Loop: Header=BB0_3 Depth=1
+        |	c.mv	s6, s1
+        |	bge	s7, s1, .LBB0_6
+        |.LBB0_3:                                # =>This Inner Loop Header: Depth=1
+        |	add	a0, s7, s6
+        |	cast a1, a0, u32
+        |	srpi	a1, a1, 31
+        |	c.add	a0, a1
+        |	srpi	s1, a0, 1
+        |	mul	s0, s1, s3
+        |	c.add	s0, s4
+        |	c.mv	a0, s5
+        |	c.mv	a1, s0
+        |	c.jalr	s2
+        |	blt	a0, zero, .LBB0_2
+        |# %bb.4:                                #   in Loop: Header=BB0_3 Depth=1
+        |	c.beqz	a0, .LBB0_7
+        |# %bb.5:                                #   in Loop: Header=BB0_3 Depth=1
+        |	addi	s7, s1, 1
+        |	blt	s7, s6, .LBB0_3
+        |.LBB0_6:
+        |	c.li	s0, 0
+        |.LBB0_7:
+        |	c.mv	a0, s0
+        |	c.ldsp	ra, 72                      # 8-byte Folded Reload
+        |	c.ldsp	s0, 64                      # 8-byte Folded Reload
+        |	c.ldsp	s1, 56                      # 8-byte Folded Reload
+        |	c.ldsp	s2, 48                      # 8-byte Folded Reload
+        |	c.ldsp	s3, 40                      # 8-byte Folded Reload
+        |	c.ldsp	s4, 32                      # 8-byte Folded Reload
+        |	c.ldsp	s5, 24                      # 8-byte Folded Reload
+        |	c.ldsp	s6, 16                      # 8-byte Folded Reload
+        |	c.ldsp	s7, 8                       # 8-byte Folded Reload
+        |	c.addi16sp	sp, 80
+        |	c.jr	ra
+        |long_comp:                              # @long_comp
+        |# %bb.0:
+        |	c.ld	a0, 0(a0)
+        |	c.ld	a1, 0(a1)
+        |	bge	a1, a0, .LBB1_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB1_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |ulong_comp:                             # @ulong_comp
+        |# %bb.0:
+        |	c.ld	a0, 0(a0)
+        |	c.ld	a1, 0(a1)
+        |	c.cast 	a0, u64
+        |	c.cast 	a1, u64
+        |	bge	a1, a0, .LBB2_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB2_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |int_comp:                               # @int_comp
+        |# %bb.0:
+        |	c.lw	a0, 0(a0)
+        |	c.lw	a1, 0(a1)
+        |	bge	a1, a0, .LBB3_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB3_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |uint_comp:                              # @uint_comp
+        |# %bb.0:
+        |	c.lw	a0, 0(a0)
+        |	c.lw	a1, 0(a1)
+        |	c.cast 	a0, u32
+        |	c.cast 	a1, u32
+        |	bge	a1, a0, .LBB4_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB4_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |short_comp:                             # @short_comp
+        |# %bb.0:
+        |	lh	a0, 0(a0)
+        |	lh	a1, 0(a1)
+        |	bge	a1, a0, .LBB5_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB5_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |ushort_comp:                            # @ushort_comp
+        |# %bb.0:
+        |	lhu	a0, 0(a0)
+        |	lhu	a1, 0(a1)
+        |	bge	a1, a0, .LBB6_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB6_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |char_comp:                              # @char_comp
+        |# %bb.0:
+        |	lb	a0, 0(a0)
+        |	lb	a1, 0(a1)
+        |	bge	a1, a0, .LBB7_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB7_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
+        |uchar_comp:                             # @uchar_comp
+        |# %bb.0:
+        |	lbu	a0, 0(a0)
+        |	lbu	a1, 0(a1)
+        |	bge	a1, a0, .LBB8_2
+        |# %bb.1:
+        |	c.li	a0, 1
+        |	c.jr	ra
+        |.LBB8_2:
+        |	slt	a0, a0, a1
+        |	sub	a0, zero, a0
+        |	c.jr	ra
         |
-        |# Stack operations
-        |c.addi16sp -16      # sp = sp - 16
-        |c.swsp x1, 0        # Store x1 to stack
-        |c.lwsp x4, 0        # Load from stack to x4
-        |
-        |# Compressed loads/stores (uses x8-x15 only)
-        |c.lw x8, 0(x9)
-        |c.sw x10, 4(x11)
-        |
-        |# Arithmetic on compressed regs
-        |c.sub x8, x9
-        |c.and x10, x11
-        |c.or x12, x13
-        |
-        |# Shifts and logic
-        |c.slli x5, 2
-        |c.srli x8, 1
-        |c.andi x9, 0x7
-        |
-        |# Branches and jumps
-        |loop:
-        |    c.addi x1, 1
-        |    c.bnez x10, loop
-        |c.j end
-        |
-        |end:
-        |    c.jr x1         # Return
         |""".stripMargin
 
     //val tokenized_code = for {

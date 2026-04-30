@@ -385,20 +385,39 @@ object TRV32_test {
     """
       |
       |""".stripMargin
-  def main(args: Array[String]): Unit = {
-    val code = compressed_spill_reload_test
-    WorkflowCompiler(code) match {
-      case Right(binary) =>
-        print(binary(0))
-        val mem = new Array[Int](1024 * 256) // 1 MB, also check masking in load and store
-        for (i <- binary.indices) {
-          mem(i) = binary(i)
-        }
-        val start = 0x00
-        val stop = start + binary.length * 4
 
-        val sim = new SimRV(mem, start, stop)
-        sim
-    }
+  private val RV64_test =
+    """
+      |addi x1, x0, -1
+      |addi x3, x0, 2
+      |slli x4, x1, 30
+      |div x5, x4, x3
+      |cast.t x7, x4, i32
+      |div x8, x7, x3
+      |cast.t x10, x4, u64
+      |div x11, x10, x3
+      |cast.t x13, x4, u32
+      |div x14, x13, x3
+      |""".stripMargin
+  def main(args: Array[String]): Unit = {
+    //val code = RV64_test
+    //WorkflowCompiler(code) match {
+    //  case Right(binary) =>
+    //    print(binary(0))
+    //    val mem = new Array[Long](1024 * 256) // 1 MB, also check masking in load and store
+    //    for (i <- binary.indices) {
+    //      mem(i) = binary(i)
+    //    }
+    //    val start = 0x00
+    //    val stop = start + binary.length * 4
+//
+    //    val sim = new SimRV(mem, start, stop)
+    //    sim
+    //}
+
+    val (mem, start, stop) = Util.readElf64("/home/ago/DTU/bachelor_project/riscv_coding/output.elf")
+
+    val sim = new SimRV(mem, start*8, stop*8)
+    sim
   }
 }
