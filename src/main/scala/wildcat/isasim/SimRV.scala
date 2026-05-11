@@ -250,10 +250,17 @@ class SimRV(mem: Array[Long], start: Long, stop: Long) {
       (lower_tag, upper_tag)
 
     }
-    def taggedRegisterLocator(displ: Int): (Int, Int, Int) = {
-      //(tagRelativeWordAddr, tagByteOffset, valueRelativeAddr)
-      (((displ >> 4) + ((displ >> 4) << 2)) << 2,  (displ >> 2) & 0b11, displ + 4 + ((displ >> 4) << 2))
+    def taggedRegisterLocator(addr: Int, idx: Int, reg_count: Int): (Int, Int, Int) = {
+      val (register_address, itag_address): (Int, Int) = (addr + (idx << 3), addr + (reg_count << 3) + idx)
 
+      val itag_dword_address: Int = (itag_address >> 3)
+      val itag_shift_amount: Int = (itag_address << 3) & 0b1111111
+      val register_dword_address: Int = (register_address >> 3)
+
+      (register_dword_address,itag_dword_address,itag_shift_amount)
+
+      //(tagRelativeWordAddr, tagByteOffset, valueRelativeAddr)
+      //(((displ >> 4) + ((displ >> 4) << 2)) << 2,  (displ >> 2) & 0b11, displ + 4 + ((displ >> 4) << 2))
       //tagSize(tag) match {
       //  case 0 => ((displ >> 2) << 1,                   (displ >> 0) & 0b11, displ + 4 + ((displ >> 2) << 2))
       //  case 1 => ((displ >> 3) + ((displ >> 3) << 1),  (displ >> 1) & 0b11, displ + 4 + ((displ >> 3) << 2))
@@ -495,29 +502,61 @@ class SimRV(mem: Array[Long], start: Long, stop: Long) {
         case CAST_T => (new_tag, rs1)
       }
     }
-
-    def spillReload(funct3: Int, base: Int, displ: Int, tag: Int, value: Int): (Int, Long) = {
-      val (tagRelativeWordAddr, tagByteOffset, valueRelativeAddr): (Int, Int, Int) = taggedRegisterLocator(displ)
-
-      val wordBase = base >>> 2
-      val tagWordAddr = (wordBase) + tagRelativeWordAddr
-      val valueWordAddr = (base + valueRelativeAddr) >>> 2
-      val shift = 8 * tagByteOffset
+    def spillReload(funct3: Int, reg_addr: Int, imm: Int, first_reg: Int): (Int, Long) = {
+      val addr = reg_addr + imm
+      val reg_count = 8
 
       funct3 match {
         case LTR =>
-          val tag = ((mem(tagWordAddr) >> shift) & 0xff).toInt
-          val value = mem(valueWordAddr)
+          for (idx <- 0 to reg_count) {
+            val (register_dword_address, itag_dword_address, itag_shift_amount): (Int, Int, Int) = taggedRegisterLocator(addr, idx, reg_count)
 
-          (tag, value)
+            val tag = ((mem(itag_dword_address) >> itag_shift_amount) & 0xff).toInt
+            val value = mem(register_dword_address)
+
+            reg(first_reg+idx) = (tag, value)
+          }
+
         case STR =>
-          val source_mask = tagSizeBitMask(u8)
-          val destination_mask = ~(source_mask << shift)
+          for (idx <- 0 to reg_count) {
+            val (register_dword_address, itag_dword_address, itag_shift_amount): (Int, Int, Int) = taggedRegisterLocator(addr, idx, reg_count)
+            val (tag, value): (Int, Long) = (reg(first_reg+idx)._1, reg(first_reg+idx)._2)
 
-          mem(tagWordAddr) = (mem(tagWordAddr) & destination_mask) | ((tag & source_mask) << shift)
-          mem(valueWordAddr) = value
-          (0, 0)
+            val source_mask = tagSizeBitMask(u8)
+            val destination_mask = ~(source_mask << itag_shift_amount)
+
+            mem(itag_dword_address) = (mem(itag_dword_address) & destination_mask) | ((tag & source_mask) << itag_shift_amount)
+            mem(register_dword_address) = value
+          }
       }
+      (0,0)
+    }
+
+    def spillReload_variable(funct3: Int, addr: Int, reg_count: Int, first_reg: Int): (Int, Long) = {
+      funct3 match {
+        case LTR =>
+          for (idx <- 0 to reg_count) {
+            val (register_dword_address, itag_dword_address, itag_shift_amount): (Int, Int, Int) = taggedRegisterLocator(addr, idx, reg_count)
+
+            val tag = ((mem(itag_dword_address) >> itag_shift_amount) & 0xff).toInt
+            val value = mem(register_dword_address)
+
+            reg(first_reg+idx) = (tag, value)
+          }
+
+        case STR =>
+          for (idx <- 0 to reg_count) {
+            val (register_dword_address, itag_dword_address, itag_shift_amount): (Int, Int, Int) = taggedRegisterLocator(addr, idx, reg_count)
+            val (tag, value): (Int, Long) = (reg(first_reg+idx)._1, reg(first_reg+idx)._2)
+
+            val source_mask = tagSizeBitMask(u8)
+            val destination_mask = ~(source_mask << itag_shift_amount)
+
+            mem(itag_dword_address) = (mem(itag_dword_address) & destination_mask) | ((tag & source_mask) << itag_shift_amount)
+            mem(register_dword_address) = value
+          }
+      }
+      (0,0)
     }
 
     //def atomic(funct5: Int, addr: Int, rs2Val: Int): (Int, Boolean) = {
@@ -613,13 +652,12 @@ class SimRV(mem: Array[Long], start: Long, stop: Long) {
       case Tag =>
         funct3 match {
           case CAST | CAST_T => (cast(funct3, rs1Val, rs1Tag, imm), true, pcNext)
-          case LTR => (spillReload(funct3,rs1Val.toInt, imm, NONE, 0), true, pcNext)
-          case STR => (spillReload(funct3,rs1Val.toInt, imm, rs2Tag, rs2Val.toInt), false, pcNext)
+          case LTR => (spillReload(funct3, rs1Val.toInt, imm, rd), false, pcNext)
+          case STR => (spillReload(funct3, rs1Val.toInt, imm, rs2), false, pcNext)
         }
 
       case _ => throw new Exception("Opcode " + opcode + " at " + pc + " not (yet) implemented")
     }
-
     // External interference simulation (uncomment for testing)
     // if (scala.util.Random.nextInt(100) < 5) { // 5% chance
     //   reservationValid = false
