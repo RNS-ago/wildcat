@@ -14,7 +14,7 @@ object TRV32_test {
       |addi x3, x3, -1
       |srp x4, x3, x2
       |# Unsigned Right Shift
-      |cast x5, x3, u_word
+      |cast x5, x3, u32
       |srp x5, x5, x2
       |""".stripMargin
 
@@ -23,7 +23,7 @@ object TRV32_test {
       |addi x3, x3, -1
       |srpi x4, x3, 3
       |# Unsigned Right Shift by Immediate
-      |cast x5, x3, u_word
+      |cast x5, x3, u32
       |srpi x5, x5, 3
       |""".stripMargin
 
@@ -33,13 +33,13 @@ object TRV32_test {
       |addi x4, x4, 1
       |slt x10, x3, x4
       |# Unsigned - Signed SLT
-      |cast x5, x3, u_word
+      |cast x5, x3, u32
       |slt x11, x5, x4
       |# Signed - Unsigned SLT
       |slt x12, x4, x5
       |# Unsigned - Unsigned SLT
-      |cast x5, x3, u_word
-      |cast x6, x4, u_word
+      |cast x5, x3, u32
+      |cast x6, x4, u32
       |slt x13, x5, x6
       |""".stripMargin
 
@@ -48,7 +48,7 @@ object TRV32_test {
       |addi x3, x3, -1
       |slti x10, x3, 1
       |# Unsigned - Signed SLT
-      |cast x3, x3, u_word
+      |cast x3, x3, u32
       |slti x11, x3, 1
       |""".stripMargin
 
@@ -58,26 +58,26 @@ object TRV32_test {
       |addi x3, x3, -1
       |
       |# Byte
-      |cast.t x3, x3, u_byte
+      |cast.t x3, x3, u8
       |st x3, 0(sp)
       |# Half Store
-      |cast.t x3, x3, u_half
+      |cast.t x3, x3, u16
       |st x3, 2(sp)
       |# Word Store
-      |cast.t x3, x3, u_word
+      |cast.t x3, x3, u32
       |st x3, 4(sp)
       |
-      |# U_Byte Load
+      |# u8 Load
       |lbu x5, 0(sp)
-      |# S_Byte Load
+      |# i8 Load
       |lb x6, 0(sp)
-      |# U_Half Load
+      |# u16 Load
       |lhu x7, 2(sp)
-      |# S_Half Load
+      |# i16 Load
       |lh x8, 2(sp)
-      |# U_Word Load
+      |# u32 Load
       |lwu x9, 4(sp)
-      |# S_Word Load
+      |# i32 Load
       |lw x10, 4(sp)
       |""".stripMargin
 
@@ -91,7 +91,7 @@ object TRV32_test {
       |jal x1, s_s
       |
       |# Unsigned - Signed SLT
-      |cast x5, x3, u_word
+      |cast x5, x3, u32
       |blt x5, x4, 8
       |jal ra, u_s
       |
@@ -100,8 +100,8 @@ object TRV32_test {
       |jal ra, s_u
       |
       |## Unsigned - Unsigned SLT
-      |cast x5, x3, u_word
-      |cast x6, x4, u_word
+      |cast x5, x3, u32
+      |cast x6, x4, u32
       |blt x5, x6, 8
       |jal ra, u_u
       |
@@ -134,7 +134,7 @@ object TRV32_test {
       |jal x1, s_s
       |
       |# Unsigned - Signed SLT
-      |cast x5, x3, u_word
+      |cast x5, x3, u32
       |bge x5, x4, 8
       |jal ra, u_s
       |
@@ -143,8 +143,8 @@ object TRV32_test {
       |jal ra, s_u
       |
       |## Unsigned - Unsigned SLT
-      |cast x5, x3, u_word
-      |cast x6, x4, u_word
+      |cast x5, x3, u32
+      |cast x6, x4, u32
       |bge x5, x6, 8
       |jal ra, u_u
       |
@@ -186,20 +186,20 @@ object TRV32_test {
       |mulh x11, x8, x9
       |mulh x12, x1, x3
       |
-      |cast.t x13, x8, u_word
-      |cast.t x14, x9, u_word
+      |cast.t x13, x8, u32
+      |cast.t x14, x9, u32
       |mulh x16, x13, x14
       |
       |addi x17, x0, -1
       |addi x18, x0, 2
-      |cast.t x17, x17, u_word
-      |cast.t x18, x18, u_word
+      |cast.t x17, x17, u32
+      |cast.t x18, x18, u32
       |mulh x19, x17, x18
       |
       |addi x20, x0, -2
       |lui x21, 0x80000
-      |cast.t x20, x20, s_word
-      |cast.t x21, x21, u_word
+      |cast.t x20, x20, i32
+      |cast.t x21, x21, u32
       |mulh x22, x20, x21
       |""".stripMargin
 
@@ -230,17 +230,17 @@ object TRV32_test {
       |div x14, x7, x8
       |
       |# Unsigned division
-      |cast.t x6, x6, u_word
-      |cast.t x3, x3, u_word
+      |cast.t x6, x6, u32
+      |cast.t x3, x3, u32
       |div x15, x3, x6
       |
       |# Division by zero
-      |cast.t x4, x4, u_word
+      |cast.t x4, x4, u32
       |div x16, x5, x4
       |
       |# Large unsigned values
-      |cast.t x8, x8, u_word
-      |cast.t x9, x9, u_word
+      |cast.t x8, x8, u32
+      |cast.t x9, x9, u32
       |div x17, x8, x9
       |""".stripMargin
 
@@ -265,17 +265,17 @@ object TRV32_test {
       |rem x13, x1, x4
       |
       |# Unsigned remainder
-      |cast.t x6, x6, u_word
-      |cast.t x3, x3, u_word
+      |cast.t x6, x6, u32
+      |cast.t x3, x3, u32
       |rem x15, x3, x6
       |
       |# Division by zero
-      |cast.t x4, x4, u_word
+      |cast.t x4, x4, u32
       |rem x16, x5, x4
       |
       |# Large unsigned values
-      |cast.t x8, x8, u_word
-      |cast.t x9, x9, u_word
+      |cast.t x8, x8, u32
+      |cast.t x9, x9, u32
       |rem x17, x8, x9
       |""".stripMargin
 
@@ -285,13 +285,13 @@ object TRV32_test {
       |
       |# Init Registers
       |addi x3, x0, -1
-      |cast.t x3, x3, u_byte
+      |cast.t x3, x3, u8
       |addi x4, x0, 10
-      |cast.t x4, x4, u_word
+      |cast.t x4, x4, u32
       |addi x5, x0, 0xff
-      |cast.t x5, x5, s_half
+      |cast.t x5, x5, i16
       |addi x6, x0, -500
-      |cast.t x6, x6, u_half
+      |cast.t x6, x6, u16
       |lui x7, 0xf2
       |
       |
@@ -313,41 +313,41 @@ object TRV32_test {
     """
       |# Cast Registers Tag
       |addi x3, x0, -1
-      |cast.t x4, x3, u_byte
+      |cast.t x4, x3, u8
       |addi x5, x0, 10
-      |cast.t x6, x5, u_word
+      |cast.t x6, x5, u32
       |addi x7, x0, 0xff
-      |cast.t x8, x7, s_half
+      |cast.t x8, x7, i16
       |addi x9, x0, -500
-      |cast.t x10, x9, s_byte
+      |cast.t x10, x9, i8
       |lui x11, 0xf2
-      |cast.t x12, x11, u_half
+      |cast.t x12, x11, u16
       |
       |# Cast Registers and Tag
       |addi x13, x0, -1
-      |cast x14, x13, u_byte
+      |cast x14, x13, u8
       |addi x15, x0, 10
-      |cast x16, x15, u_word
+      |cast x16, x15, u32
       |addi x17, x0, 0xff
-      |cast x18, x17, s_half
+      |cast x18, x17, i16
       |addi x19, x0, -500
-      |cast x20, x19, s_byte
+      |cast x20, x19, i8
       |lui x21, 0xf2
-      |cast x22, x21, u_half
+      |cast x22, x21, u16
       |""".stripMargin
 
   private val compressed_cast_test =
     """# Cast Registers and Tag
       |c.addi x13, -1
-      |c.cast x13, u_byte
+      |c.cast x13, u8
       |c.addi x15, 10
-      |c.cast x15, u_word
+      |c.cast x15, u32
       |c.addi x17, 0xff
-      |c.cast x17, s_half
+      |c.cast x17, i16
       |c.addi x19, -500
-      |c.cast x19, s_byte
+      |c.cast x19, i8
       |c.lui x21, 0xf2
-      |c.cast x21, u_half
+      |c.cast x21, u16
       |""".stripMargin
 
   private val compressed_spill_reload_test =
@@ -357,13 +357,13 @@ object TRV32_test {
       |
       |# Init Registers
       |c.addi x3, -1
-      |c.cast x3, u_byte
+      |c.cast x3, u8
       |c.addi x4, 10
-      |c.cast x4, u_word
+      |c.cast x4, u32
       |c.addi x5, 0xff
-      |c.cast x5, s_half
+      |c.cast x5, i16
       |c.addi x6, -500
-      |c.cast x6, u_half
+      |c.cast x6, u16
       |c.lui x7, 0xf2
       |
       |
@@ -383,7 +383,20 @@ object TRV32_test {
 
   private val context_switch_test =
     """
+      |# Cast Registers and Tag
+      |addi x10, x0, -1
+      |cast x11, x10, u8
+      |addi x12, x0, 10
+      |cast x13, x12, u32
+      |addi x14, x0, 0xff
+      |cast x15, x14, u16
+      |lui x16, 0xff
+      |cast x17, x16, u64
       |
+      |
+      |addi x3, x0, 0xff
+      |str x10, 3(x3)
+      |ltr x21, 3(x3)
       |""".stripMargin
 
   private val RV64_test =
@@ -399,25 +412,32 @@ object TRV32_test {
       |cast.t x13, x4, u32
       |div x14, x13, x3
       |""".stripMargin
+
   def main(args: Array[String]): Unit = {
-    //val code = RV64_test
-    //WorkflowCompiler(code) match {
-    //  case Right(binary) =>
-    //    print(binary(0))
-    //    val mem = new Array[Long](1024 * 256) // 1 MB, also check masking in load and store
-    //    for (i <- binary.indices) {
-    //      mem(i) = binary(i)
-    //    }
-    //    val start = 0x00
-    //    val stop = start + binary.length * 4
+    val code = context_switch_test
+    WorkflowCompiler(code) match {
+      case Right(binary) =>
+        print(binary(0))
+        val mem = new Array[Long](1024 * 256) // 1 MB, also check masking in load and store
+
+        for (i <- 0 until binary.length / 2) {
+          val lo = binary(2 * i).toLong & 0xFFFFFFFFL
+          val hi = binary(2 * i + 1).toLong & 0xFFFFFFFFL
+          mem(i) = (hi << 32) | lo
+        }
+        if (binary.length % 2 == 1) {
+          mem(binary.length / 2) = binary.last.toLong & 0xFFFFFFFFL
+        }
+
+        val start = 0x00
+        val stop = start + binary.length * 4
+
+        val sim = new SimRV(mem, start, stop)
+    }
+
+    //val (mem, start, stop) = Util.readElf64("/home/ago/DTU/bachelor_project/riscv_coding/output.elf")
 //
-    //    val sim = new SimRV(mem, start, stop)
-    //    sim
-    //}
-
-    val (mem, start, stop) = Util.readElf64("/home/ago/DTU/bachelor_project/riscv_coding/output.elf")
-
-    val sim = new SimRV(mem, start*8, stop*8)
-    sim
+    //val sim = new SimRV(mem, start*8, stop*8)
+    //sim
   }
 }
